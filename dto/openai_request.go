@@ -227,10 +227,11 @@ func (r *GeneralOpenAIRequest) GetSystemRoleName() string {
 const CustomType = "custom"
 
 type ToolCallRequest struct {
-	ID       string          `json:"id,omitempty"`
-	Type     string          `json:"type"`
-	Function FunctionRequest `json:"function,omitempty"`
-	Custom   json.RawMessage `json:"custom,omitempty"`
+	ID           string          `json:"id,omitempty"`
+	Type         string          `json:"type"`
+	Function     FunctionRequest `json:"function,omitempty"`
+	Custom       json.RawMessage `json:"custom,omitempty"`
+	CacheControl json.RawMessage `json:"cache_control,omitempty"`
 }
 
 type FunctionRequest struct {
@@ -504,6 +505,22 @@ func (m *Message) IsStringContent() bool {
 	return false
 }
 
+// rawJSONFromMapField marshals one map entry for passthrough fields (e.g. Anthropic-compatible cache_control on OpenAI content parts).
+func rawJSONFromMapField(m map[string]any, key string) json.RawMessage {
+	if m == nil {
+		return nil
+	}
+	v, ok := m[key]
+	if !ok || v == nil {
+		return nil
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	return json.RawMessage(b)
+}
+
 func (m *Message) ParseContent() []MediaContent {
 	if m.Content == nil {
 		return nil
@@ -548,13 +565,13 @@ func (m *Message) ParseContent() []MediaContent {
 			continue
 		}
 
+		cc := rawJSONFromMapField(contentItem, "cache_control")
+
 		switch contentType {
 		case ContentTypeText:
 			if text, ok := contentItem["text"].(string); ok {
-				contentList = append(contentList, MediaContent{
-					Type: ContentTypeText,
-					Text: text,
-				})
+				mc := MediaContent{Type: ContentTypeText, Text: text, CacheControl: cc}
+				contentList = append(contentList, mc)
 			}
 
 		case ContentTypeImageURL:
@@ -575,10 +592,8 @@ func (m *Message) ParseContent() []MediaContent {
 					temp.Url = url
 				}
 			}
-			contentList = append(contentList, MediaContent{
-				Type:     ContentTypeImageURL,
-				ImageUrl: temp,
-			})
+			mc := MediaContent{Type: ContentTypeImageURL, ImageUrl: temp, CacheControl: cc}
+			contentList = append(contentList, mc)
 
 		case ContentTypeInputAudio:
 			if audioData, ok := contentItem["input_audio"].(map[string]interface{}); ok {
@@ -589,44 +604,48 @@ func (m *Message) ParseContent() []MediaContent {
 						Data:   data,
 						Format: format,
 					}
-					contentList = append(contentList, MediaContent{
-						Type:       ContentTypeInputAudio,
-						InputAudio: temp,
-					})
+					mc := MediaContent{Type: ContentTypeInputAudio, InputAudio: temp, CacheControl: cc}
+					contentList = append(contentList, mc)
 				}
 			}
 		case ContentTypeFile:
 			if fileData, ok := contentItem["file"].(map[string]interface{}); ok {
 				fileId, ok3 := fileData["file_id"].(string)
 				if ok3 {
-					contentList = append(contentList, MediaContent{
+					mc := MediaContent{
 						Type: ContentTypeFile,
 						File: &MessageFile{
 							FileId: fileId,
 						},
-					})
+						CacheControl: cc,
+					}
+					contentList = append(contentList, mc)
 				} else {
 					fileName, ok1 := fileData["filename"].(string)
 					fileDataStr, ok2 := fileData["file_data"].(string)
 					if ok1 && ok2 {
-						contentList = append(contentList, MediaContent{
+						mc := MediaContent{
 							Type: ContentTypeFile,
 							File: &MessageFile{
 								FileName: fileName,
 								FileData: fileDataStr,
 							},
-						})
+							CacheControl: cc,
+						}
+						contentList = append(contentList, mc)
 					}
 				}
 			}
 		case ContentTypeVideoUrl:
 			if videoUrl, ok := contentItem["video_url"].(string); ok {
-				contentList = append(contentList, MediaContent{
+				mc := MediaContent{
 					Type: ContentTypeVideoUrl,
 					VideoUrl: &MessageVideoUrl{
 						Url: videoUrl,
 					},
-				})
+					CacheControl: cc,
+				}
+				contentList = append(contentList, mc)
 			}
 		}
 	}

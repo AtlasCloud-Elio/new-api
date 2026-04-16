@@ -65,6 +65,9 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 				}
 				claudeTool.InputSchema[s] = a
 			}
+			if len(tool.CacheControl) > 0 {
+				claudeTool.CacheControl = tool.CacheControl
+			}
 			claudeTools = append(claudeTools, &claudeTool)
 		}
 	}
@@ -283,8 +286,9 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 				for _, ctx := range message.ParseContent() {
 					if ctx.Type == "text" {
 						systemMessages = append(systemMessages, dto.ClaudeMediaMessage{
-							Type: "text",
-							Text: common.GetPointer[string](ctx.Text),
+							Type:         "text",
+							Text:         common.GetPointer[string](ctx.Text),
+							CacheControl: ctx.CacheControl,
 						})
 					}
 					// 未来可以在这里扩展对图片等其他类型的支持
@@ -346,8 +350,9 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 					switch mediaMessage.Type {
 					case "text":
 						claudeMediaMessages = append(claudeMediaMessages, dto.ClaudeMediaMessage{
-							Type: "text",
-							Text: common.GetPointer[string](mediaMessage.Text),
+							Type:         "text",
+							Text:         common.GetPointer[string](mediaMessage.Text),
+							CacheControl: mediaMessage.CacheControl,
 						})
 					default:
 						source := mediaMessage.ToFileSource()
@@ -371,6 +376,7 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 
 						claudeMediaMessage.Source.MediaType = mimeType
 						claudeMediaMessage.Source.Data = base64Data
+						claudeMediaMessage.CacheControl = mediaMessage.CacheControl
 						claudeMediaMessages = append(claudeMediaMessages, claudeMediaMessage)
 						continue
 					}
@@ -404,6 +410,7 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 
 	claudeRequest.Prompt = ""
 	claudeRequest.Messages = claudeMessages
+
 	return &claudeRequest, nil
 }
 
@@ -919,9 +926,6 @@ func ClaudeHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayI
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
-	}
-	if common.DebugEnabled {
-		println("responseBody: ", string(responseBody))
 	}
 	handleErr := HandleClaudeResponseData(c, info, claudeInfo, resp, responseBody)
 	if handleErr != nil {

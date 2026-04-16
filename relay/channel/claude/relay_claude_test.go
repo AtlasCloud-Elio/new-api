@@ -2,6 +2,7 @@ package claude
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -348,6 +349,69 @@ func TestRequestOpenAI2ClaudeMessage_SupportsPDFFileContent(t *testing.T) {
 	require.Equal(t, "text", content[1].Type)
 	require.NotNil(t, content[1].Text)
 	require.Equal(t, "summarize it", *content[1].Text)
+}
+
+func TestRequestOpenAI2ClaudeMessage_PreservesCacheControlOnContentParts(t *testing.T) {
+	cache := json.RawMessage(`{"type":"ephemeral"}`)
+	request := dto.GeneralOpenAIRequest{
+		Model: "claude-sonnet-4-20250514",
+		Messages: []dto.Message{
+			{
+				Role: "system",
+				Content: []any{
+					map[string]any{
+						"type":           "text",
+						"text":           "long system prompt",
+						"cache_control":  map[string]any{"type": "ephemeral"},
+					},
+				},
+			},
+			{
+				Role: "user",
+				Content: []any{
+					map[string]any{
+						"type":          "text",
+						"text":          "cached user block",
+						"cache_control": map[string]any{"type": "ephemeral", "ttl": "1h"},
+					},
+				},
+			},
+		},
+		Tools: []dto.ToolCallRequest{
+			{
+				Type: "function",
+				Function: dto.FunctionRequest{
+					Name:        "demo",
+					Description: "d",
+					Parameters: map[string]any{
+						"type":       "object",
+						"properties": map[string]any{},
+					},
+				},
+				CacheControl: cache,
+			},
+		},
+	}
+
+	claudeRequest, err := RequestOpenAI2ClaudeMessage(nil, request)
+	require.NoError(t, err)
+	sys, ok := claudeRequest.System.([]dto.ClaudeMediaMessage)
+	require.True(t, ok)
+	require.Len(t, sys, 1)
+	require.JSONEq(t, `{"type":"ephemeral"}`, string(sys[0].CacheControl))
+
+	require.Len(t, claudeRequest.Messages, 1)
+	parts, ok := claudeRequest.Messages[0].Content.([]dto.ClaudeMediaMessage)
+	require.True(t, ok)
+	require.Len(t, parts, 1)
+	require.JSONEq(t, `{"type":"ephemeral","ttl":"1h"}`, string(parts[0].CacheControl))
+
+	tools, ok := claudeRequest.Tools.([]any)
+	require.True(t, ok)
+	require.Len(t, tools, 1)
+	toolPtr, ok := tools[0].(*dto.Tool)
+	require.True(t, ok)
+	require.JSONEq(t, `{"type":"ephemeral"}`, string(toolPtr.CacheControl))
 }
 
 func TestRequestOpenAI2ClaudeMessage_ConvertsTextFileContentToText(t *testing.T) {
