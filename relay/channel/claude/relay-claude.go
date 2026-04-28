@@ -245,8 +245,9 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 			textRequest.Messages[i].Role = "user"
 		}
 		fmtMessage := dto.Message{
-			Role:    message.Role,
-			Content: message.Content,
+			Role:         message.Role,
+			Content:      message.Content,
+			CacheControl: message.CacheControl,
 		}
 		if message.Role == "tool" {
 			fmtMessage.ToolCallId = message.ToolCallId
@@ -326,9 +327,10 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 						}
 					}
 					lastMessage.Content = append(lastMessage.Content.([]dto.ClaudeMediaMessage), dto.ClaudeMediaMessage{
-						Type:      "tool_result",
-						ToolUseId: message.ToolCallId,
-						Content:   message.Content,
+						Type:         "tool_result",
+						ToolUseId:    message.ToolCallId,
+						Content:      message.Content,
+						CacheControl: message.CacheControl,
 					})
 					claudeMessages[len(claudeMessages)-1] = lastMessage
 					continue
@@ -336,9 +338,10 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 					claudeMessage.Role = "user"
 					claudeMessage.Content = []dto.ClaudeMediaMessage{
 						{
-							Type:      "tool_result",
-							ToolUseId: message.ToolCallId,
-							Content:   message.Content,
+							Type:         "tool_result",
+							ToolUseId:    message.ToolCallId,
+							Content:      message.Content,
+							CacheControl: message.CacheControl,
 						},
 					}
 				}
@@ -390,10 +393,11 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 							continue
 						}
 						claudeMediaMessages = append(claudeMediaMessages, dto.ClaudeMediaMessage{
-							Type:  "tool_use",
-							Id:    toolCall.ID,
-							Name:  toolCall.Function.Name,
-							Input: inputObj,
+							Type:         "tool_use",
+							Id:           toolCall.ID,
+							Name:         toolCall.Function.Name,
+							Input:        inputObj,
+							CacheControl: toolCall.CacheControl,
 						})
 					}
 				}

@@ -284,6 +284,7 @@ type Message struct {
 	Reasoning        string          `json:"reasoning,omitempty"`
 	ToolCalls        json.RawMessage `json:"tool_calls,omitempty"`
 	ToolCallId       string          `json:"tool_call_id,omitempty"`
+	CacheControl     json.RawMessage `json:"cache_control,omitempty"` // tool role → Claude tool_result (gateway extension)
 	parsedContent    []MediaContent
 	//parsedStringContent *string
 }

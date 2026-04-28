@@ -182,9 +182,10 @@ func ClaudeToOpenAIRequest(claudeRequest dto.ClaudeRequest, info *relaycommon.Re
 						toolName = claudeRequest.SearchToolNameByToolCallId(mediaMsg.ToolUseId)
 					}
 					oaiToolMessage := dto.Message{
-						Role:       "tool",
-						Name:       &toolName,
-						ToolCallId: mediaMsg.ToolUseId,
+						Role:         "tool",
+						Name:         &toolName,
+						ToolCallId:   mediaMsg.ToolUseId,
+						CacheControl: mediaMsg.CacheControl,
 					}
 					//oaiToolMessage.SetStringContent(*mediaMsg.GetMediaContent().Text)
 					if mediaMsg.IsStringContent() {

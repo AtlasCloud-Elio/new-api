@@ -414,6 +414,122 @@ func TestRequestOpenAI2ClaudeMessage_PreservesCacheControlOnContentParts(t *test
 	require.JSONEq(t, `{"type":"ephemeral"}`, string(toolPtr.CacheControl))
 }
 
+func TestRequestOpenAI2ClaudeMessage_PreservesCacheControlOnAssistantToolCalls(t *testing.T) {
+	cache := json.RawMessage(`{"type":"ephemeral"}`)
+	toolCallsJSON, err := json.Marshal([]dto.ToolCallRequest{
+		{
+			ID:   "call_1",
+			Type: "function",
+			Function: dto.FunctionRequest{
+				Name:      "get_weather",
+				Arguments: `{"city":"NYC"}`,
+			},
+			CacheControl: cache,
+		},
+	})
+	require.NoError(t, err)
+
+	request := dto.GeneralOpenAIRequest{
+		Model: "claude-sonnet-4-20250514",
+		Messages: []dto.Message{
+			{Role: "user", Content: "what is the weather?"},
+			{
+				Role:      "assistant",
+				Content:   "",
+				ToolCalls: toolCallsJSON,
+			},
+		},
+	}
+
+	claudeRequest, err := RequestOpenAI2ClaudeMessage(nil, request)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(claudeRequest.Messages), 2)
+
+	var assistantParts []dto.ClaudeMediaMessage
+	for _, m := range claudeRequest.Messages {
+		if m.Role == "assistant" {
+			parts, ok := m.Content.([]dto.ClaudeMediaMessage)
+			require.True(t, ok)
+			assistantParts = parts
+			break
+		}
+	}
+	require.NotEmpty(t, assistantParts)
+
+	var toolUse *dto.ClaudeMediaMessage
+	for i := range assistantParts {
+		if assistantParts[i].Type == "tool_use" {
+			toolUse = &assistantParts[i]
+			break
+		}
+	}
+	require.NotNil(t, toolUse)
+	require.Equal(t, "get_weather", toolUse.Name)
+	require.JSONEq(t, `{"type":"ephemeral"}`, string(toolUse.CacheControl))
+}
+
+func TestRequestOpenAI2ClaudeMessage_PreservesCacheControlOnToolRoleMessage(t *testing.T) {
+	cache := json.RawMessage(`{"type":"ephemeral"}`)
+	toolCallsJSON, err := json.Marshal([]dto.ToolCallRequest{
+		{
+			ID:   "call_1",
+			Type: "function",
+			Function: dto.FunctionRequest{
+				Name:      "demo",
+				Arguments: `{}`,
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	request := dto.GeneralOpenAIRequest{
+		Model: "claude-sonnet-4-20250514",
+		Messages: []dto.Message{
+			{Role: "user", Content: "run demo"},
+			{
+				Role:      "assistant",
+				Content:   "",
+				ToolCalls: toolCallsJSON,
+			},
+			{
+				Role:         "tool",
+				ToolCallId:   "call_1",
+				Content:      `{"ok":true}`,
+				CacheControl: cache,
+			},
+		},
+	}
+
+	claudeRequest, err := RequestOpenAI2ClaudeMessage(nil, request)
+	require.NoError(t, err)
+
+	var userWithTool []dto.ClaudeMediaMessage
+	for _, m := range claudeRequest.Messages {
+		if m.Role == "user" {
+			if parts, ok := m.Content.([]dto.ClaudeMediaMessage); ok {
+				for _, p := range parts {
+					if p.Type == "tool_result" {
+						userWithTool = parts
+						break
+					}
+				}
+			}
+		}
+	}
+	require.NotEmpty(t, userWithTool)
+
+	var tr *dto.ClaudeMediaMessage
+	for i := range userWithTool {
+		if userWithTool[i].Type == "tool_result" {
+			tr = &userWithTool[i]
+			break
+		}
+	}
+	require.NotNil(t, tr)
+	require.Equal(t, "call_1", tr.ToolUseId)
+	require.JSONEq(t, `{"type":"ephemeral"}`, string(tr.CacheControl))
+}
+
 func TestRequestOpenAI2ClaudeMessage_ConvertsTextFileContentToText(t *testing.T) {
 	request := dto.GeneralOpenAIRequest{
 		Model: "claude-3-5-sonnet",
