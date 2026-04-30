@@ -351,6 +351,32 @@ func TestRequestOpenAI2ClaudeMessage_SupportsPDFFileContent(t *testing.T) {
 	require.Equal(t, "summarize it", *content[1].Text)
 }
 
+func TestRequestOpenAI2ClaudeMessage_DeveloperRoleMapsToSystemLikeSystem(t *testing.T) {
+	request := dto.GeneralOpenAIRequest{
+		Model: "claude-sonnet-4-20250514",
+		Messages: []dto.Message{
+			{
+				Role:    "developer",
+				Content: "You are a helpful assistant. Prefer calling tools when needed.",
+			},
+			{
+				Role:    "user",
+				Content: "Hello",
+			},
+		},
+	}
+	claudeRequest, err := RequestOpenAI2ClaudeMessage(nil, request)
+	require.NoError(t, err)
+	sys, ok := claudeRequest.System.([]dto.ClaudeMediaMessage)
+	require.True(t, ok)
+	require.Len(t, sys, 1)
+	require.Equal(t, "text", sys[0].Type)
+	require.NotNil(t, sys[0].Text)
+	require.Equal(t, "You are a helpful assistant. Prefer calling tools when needed.", *sys[0].Text)
+	require.Len(t, claudeRequest.Messages, 1)
+	require.Equal(t, "user", claudeRequest.Messages[0].Role)
+}
+
 func TestRequestOpenAI2ClaudeMessage_PreservesCacheControlOnContentParts(t *testing.T) {
 	cache := json.RawMessage(`{"type":"ephemeral"}`)
 	request := dto.GeneralOpenAIRequest{
