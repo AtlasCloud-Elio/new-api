@@ -5,8 +5,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/QuantumNous/new-api/types"
 )
 
 type StatusCodeRange struct {
@@ -16,26 +14,23 @@ type StatusCodeRange struct {
 
 var AutomaticDisableStatusCodeRanges = []StatusCodeRange{{Start: 401, End: 401}}
 
-// Default behavior matches legacy hardcoded retry rules in controller/relay.go shouldRetry:
-// retry for 1xx, 3xx, 4xx(except 400/408), 5xx(except 504/524), and no retry for 2xx.
+// Default retry ranges for relay failover: include 400/408/504/524 so those responses may try the next channel.
+// Ranges must be sorted by Start ascending for shouldMatchStatusCodeRanges.
 var AutomaticRetryStatusCodeRanges = []StatusCodeRange{
 	{Start: 100, End: 199},
 	{Start: 300, End: 399},
+	{Start: 400, End: 400},
 	{Start: 401, End: 407},
+	{Start: 408, End: 408},
 	{Start: 409, End: 499},
 	{Start: 500, End: 503},
+	{Start: 504, End: 504},
 	{Start: 505, End: 523},
+	{Start: 524, End: 524},
 	{Start: 525, End: 599},
 }
 
-var alwaysSkipRetryStatusCodes = map[int]struct{}{
-	504: {},
-	524: {},
-}
-
-var alwaysSkipRetryCodes = map[types.ErrorCode]struct{}{
-	types.ErrorCodeBadResponseBody: {},
-}
+var alwaysSkipRetryStatusCodes = map[int]struct{}{}
 
 func AutomaticDisableStatusCodesToString() string {
 	return statusCodeRangesToString(AutomaticDisableStatusCodeRanges)
@@ -69,11 +64,6 @@ func AutomaticRetryStatusCodesFromString(s string) error {
 
 func IsAlwaysSkipRetryStatusCode(code int) bool {
 	_, exists := alwaysSkipRetryStatusCodes[code]
-	return exists
-}
-
-func IsAlwaysSkipRetryCode(errorCode types.ErrorCode) bool {
-	_, exists := alwaysSkipRetryCodes[errorCode]
 	return exists
 }
 
